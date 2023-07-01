@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -60,6 +61,12 @@ class PostDetailView(DetailView):
     model = Post
     template_name = 'blog/detail.html'
 
+    def dispatch(self, request, *args, **kwargs):
+        instance = get_object_or_404(Post, pk=kwargs['pk'])
+        if instance.author != request.user and (not instance.is_published or not instance.category.is_published or not instance.pub_date <= timezone.now()):
+            raise Http404()
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['form'] = CommentForm()
@@ -102,7 +109,7 @@ def category_posts(request, category_slug):
 
 def user_detail(request, post_author):
     template_name = 'blog/profile.html'
-    profile = User.objects.get(username=post_author)
+    profile = get_object_or_404(User, username=post_author)
     post_list = Post.objects.filter(author__username=post_author)
     page_obj = get_page_obj(request, post_list)
     context = {'profile': profile, 'page_obj': page_obj}
