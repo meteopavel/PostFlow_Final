@@ -42,7 +42,7 @@ def get_comment_instance(request, post_pk, comment_pk):
         Comment,
         pk=comment_pk,
         post_id=post_pk,
-        )
+    )
     return instance
 
 
