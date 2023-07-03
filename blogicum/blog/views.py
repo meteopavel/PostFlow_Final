@@ -1,3 +1,5 @@
+from django.db.models import Count
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
@@ -21,14 +23,27 @@ def get_base_query():
         pub_date__lte=timezone.now(),
         is_published=True,
         category__is_published=True,
+    ).annotate(
+        comment_count=Count('comments')
+    ).order_by(
+        '-pub_date', 'title'
     )
 
 
 def get_page_obj(request, post_list):
-    paginator = Paginator(post_list, 10)
+    paginator = Paginator(post_list, settings.POSTS_PER_PAGE)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     return page_obj
+
+
+def get_comment_instance(request, post_pk, comment_pk):
+    instance = get_object_or_404(
+        Comment,
+        pk=comment_pk,
+        post_id=post_pk,
+        )
+    return instance
 
 
 class PostMixin:
@@ -37,14 +52,17 @@ class PostMixin:
     template_name = 'blog/create.html'
 
     def get_success_url(self):
-        return reverse('blog:profile',
-                       kwargs={'post_author': self.request.user.username})
+        return reverse(
+            'blog:profile',
+            kwargs={'post_author': self.request.user.username}
+        )
 
 
 class PostEditMixin:
+    pk_url_kwarg = 'post_pk'
 
     def dispatch(self, request, *args, **kwargs):
-        instance = get_object_or_404(Post, pk=kwargs['pk'])
+        instance = get_object_or_404(Post, pk=kwargs['post_pk'])
         if instance.author != request.user:
             return redirect('blog:post_detail', instance.pk)
         return super().dispatch(request, *args, **kwargs)
@@ -53,28 +71,29 @@ class PostEditMixin:
 class PostListView(ListView):
     model = Post
     template_name = 'blog/index.html'
+    paginate_by = settings.POSTS_PER_PAGE
     queryset = get_base_query()
-    paginate_by = 10
 
 
 class PostDetailView(DetailView):
     model = Post
     template_name = 'blog/detail.html'
+    pk_url_kwarg = 'post_pk'
 
-    def dispatch(self, request, *args, **kwargs):
-        instance = get_object_or_404(Post, pk=kwargs['pk'])
-        if (instance.author != request.user
-           and (not instance.is_published
-                or not instance.category.is_published
-                or not instance.pub_date <= timezone.now())):
+    def get_object(self):
+        post = super().get_object()
+        if (post.author != self.request.user
+           and (not post.is_published
+                or not post.category.is_published
+                or not post.pub_date <= timezone.now())):
             raise Http404()
-        return super().dispatch(request, *args, **kwargs)
+        return post
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['form'] = CommentForm()
         context['comments'] = (
-            self.object.comment.select_related('author')
+            self.object.comments.select_related('author')
         )
         return context
 
@@ -87,7 +106,12 @@ class PostCreateView(LoginRequiredMixin, PostMixin, CreateView):
 
 
 class PostUpdateView(LoginRequiredMixin, PostMixin, PostEditMixin, UpdateView):
-    pass
+
+    def get_success_url(self):
+        return reverse(
+            'blog:post_detail',
+            kwargs={'post_pk': self.object.pk}
+        )
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, PostEditMixin, DeleteView):
@@ -113,7 +137,13 @@ def category_posts(request, category_slug):
 def user_detail(request, post_author):
     template_name = 'blog/profile.html'
     profile = get_object_or_404(User, username=post_author)
-    post_list = Post.objects.filter(author__username=post_author)
+    post_list = profile.posts.filter(
+        author__username=post_author
+    ).annotate(
+        comment_count=Count('comments')
+    ).order_by(
+        '-pub_date', 'title'
+    )
     page_obj = get_page_obj(request, post_list)
     context = {'profile': profile, 'page_obj': page_obj}
     return render(request, template_name, context)
@@ -121,8 +151,7 @@ def user_detail(request, post_author):
 
 @login_required
 def user_edit(request):
-    instance = get_object_or_404(User, pk=request.user.id)
-    form = UpdateUserForm(request.POST or None, instance=instance)
+    form = UpdateUserForm(request.POST or None, instance=request.user)
     template_name = 'blog/user.html'
     context = {'form': form}
     if form.is_valid():
@@ -131,33 +160,37 @@ def user_edit(request):
 
 
 @login_required
-def add_comment(request, pk):
-    post = get_object_or_404(Post, pk=pk)
+def add_comment(request, post_pk):
+    post = get_object_or_404(Post, pk=post_pk)
     form = CommentForm(request.POST)
     if form.is_valid():
         comment = form.save(commit=False)
         comment.author = request.user
         comment.post = post
         comment.save()
-    return redirect('blog:post_detail', pk=pk)
+    return redirect('blog:post_detail', post_pk=post_pk)
 
 
 @login_required
 def edit_comment(request, post_pk, comment_pk):
-    instance = get_object_or_404(Comment, pk=comment_pk, author=request.user)
+    instance = get_comment_instance(request, post_pk, comment_pk)
+    if instance.author != request.user:
+        return redirect('blog:post_detail', post_pk=post_pk)
     form = CommentForm(request.POST or None, instance=instance)
     context = {'form': form, 'comment': instance}
     if form.is_valid():
         form.save()
-        return redirect('blog:post_detail', pk=post_pk)
+        return redirect('blog:post_detail', post_pk=post_pk)
     return render(request, 'blog/comment.html', context)
 
 
 @login_required
 def delete_comment(request, post_pk, comment_pk):
-    instance = get_object_or_404(Comment, pk=comment_pk, author=request.user)
+    instance = get_comment_instance(request, post_pk, comment_pk)
+    if instance.author != request.user:
+        return redirect('blog:post_detail', post_pk=post_pk)
     context = {'comment': instance}
     if request.method == 'POST':
         instance.delete()
-        return redirect('blog:post_detail', pk=post_pk)
+        return redirect('blog:post_detail', post_pk=post_pk)
     return render(request, 'blog/comment.html', context)
