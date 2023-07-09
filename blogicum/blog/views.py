@@ -1,8 +1,7 @@
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,39 +10,8 @@ from django.views.generic import (CreateView, DeleteView, DetailView, ListView,
                                   UpdateView)
 
 from .forms import CommentForm, PostForm, UpdateUserForm
-from .models import Category, Comment, Post, User
-
-
-def get_base_query():
-    return Post.objects.select_related(
-        'author',
-        'location',
-        'category',
-    ).filter(
-        pub_date__lte=timezone.now(),
-        is_published=True,
-        category__is_published=True,
-    ).annotate(
-        comment_count=Count('comments')
-    ).order_by(
-        '-pub_date', 'title'
-    )
-
-
-def get_page_obj(request, post_list):
-    paginator = Paginator(post_list, settings.POSTS_PER_PAGE)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    return page_obj
-
-
-def get_comment_instance(request, post_pk, comment_pk):
-    instance = get_object_or_404(
-        Comment,
-        pk=comment_pk,
-        post_id=post_pk,
-    )
-    return instance
+from .models import Category, Post, User, Location
+from .utils import get_base_query, get_comment_instance, get_page_obj
 
 
 class PostMixin:
@@ -80,6 +48,14 @@ class PostDetailView(DetailView):
     template_name = 'blog/detail.html'
     pk_url_kwarg = 'post_pk'
 
+    published_categories = Location.objects.filter(is_published=True)
+    queryset = Post.objects.select_related(
+        'author',
+        'category',
+    ).prefetch_related(
+        Prefetch('location', published_categories)
+    )
+
     def get_object(self):
         post = super().get_object()
         if (post.author != self.request.user
@@ -115,7 +91,15 @@ class PostUpdateView(LoginRequiredMixin, PostMixin, PostEditMixin, UpdateView):
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, PostEditMixin, DeleteView):
-    pass
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = PostForm(
+            instance=get_object_or_404(
+                Post, pk=self.kwargs['post_pk']
+            )
+        )
+        return context
 
 
 def category_posts(request, category_slug):
@@ -125,8 +109,7 @@ def category_posts(request, category_slug):
         is_published=True,
         slug=category_slug,
     )
-    post_list = get_base_query(
-    ).filter(
+    post_list = get_base_query().filter(
         category__slug=category_slug
     )
     page_obj = get_page_obj(request, post_list)
@@ -137,13 +120,18 @@ def category_posts(request, category_slug):
 def user_detail(request, post_author):
     template_name = 'blog/profile.html'
     profile = get_object_or_404(User, username=post_author)
-    post_list = profile.posts.filter(
-        author__username=post_author
-    ).annotate(
-        comment_count=Count('comments')
-    ).order_by(
-        '-pub_date', 'title'
-    )
+    if profile == request.user:
+        post_list = profile.posts.filter(
+            author__username=post_author
+        ).annotate(
+            comment_count=Count('comments')
+        ).order_by(
+            '-pub_date', 'title'
+        )
+    else:
+        post_list = get_base_query().filter(
+            author=profile
+        )
     page_obj = get_page_obj(request, post_list)
     context = {'profile': profile, 'page_obj': page_obj}
     return render(request, template_name, context)

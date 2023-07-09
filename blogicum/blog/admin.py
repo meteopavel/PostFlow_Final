@@ -25,7 +25,7 @@ class CategoryAdmin(admin.ModelAdmin):
 
 class CommentAdmin(admin.ModelAdmin):
     list_display = (
-        'text',
+        'short_text',
         'is_published',
     )
     list_editable = (
@@ -55,13 +55,18 @@ class PostAdmin(admin.ModelAdmin):
         'pub_date',
         'author',
         'category',
+        'location',
     )
     list_editable = (
         'is_published',
-        'category'
+        'category',
+        'location',
     )
     search_fields = ('title',)
-    list_filter = ('category',)
+    list_filter = (
+        'category',
+        'location',
+    )
 
 
 admin.site.register(Category, CategoryAdmin)
