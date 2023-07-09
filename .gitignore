@@ -149,7 +149,3 @@ dmypy.json
 media/
 
 sent_emails/
-
-# вспомогательные файлы
-
-blogicum/blog/cbv.py
