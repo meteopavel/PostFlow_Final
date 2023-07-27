@@ -1,4 +1,3 @@
-from typing import Any, Dict
 from django.db.models import Count, Prefetch
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -92,7 +91,15 @@ class PostUpdateView(LoginRequiredMixin, PostMixin, PostEditMixin, UpdateView):
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, PostEditMixin, DeleteView):
-    pass
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = PostForm(
+            instance=get_object_or_404(
+                Post, pk=self.kwargs['post_pk']
+            )
+        )
+        return context
 
 
 def category_posts(request, category_slug):
