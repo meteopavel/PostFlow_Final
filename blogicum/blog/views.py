@@ -92,16 +92,7 @@ class PostUpdateView(LoginRequiredMixin, PostMixin, PostEditMixin, UpdateView):
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, PostEditMixin, DeleteView):
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['form'] = PostForm(Post.objects.get(
-            pk=self.kwargs['post_pk']
-        ))
-        
-        
-        return context
+    pass
 
 
 def category_posts(request, category_slug):
@@ -131,7 +122,9 @@ def user_detail(request, post_author):
             '-pub_date', 'title'
         )
     else:
-        post_list = get_base_query()
+        post_list = get_base_query().filter(
+            author=profile
+        )
     page_obj = get_page_obj(request, post_list)
     context = {'profile': profile, 'page_obj': page_obj}
     return render(request, template_name, context)
