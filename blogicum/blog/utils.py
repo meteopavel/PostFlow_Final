@@ -9,9 +9,10 @@ from .models import Comment, Location, Post
 
 def get_base_query():
     published_categories = Location.objects.filter(is_published=True)
-    return Post.objects.prefetch_related(
+    return Post.objects.select_related(
         'author',
         'category',
+    ).prefetch_related(
         Prefetch('location', published_categories)
     ).filter(
         pub_date__lte=timezone.now(),

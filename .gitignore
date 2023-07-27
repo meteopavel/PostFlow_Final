@@ -150,3 +150,5 @@ media/
 
 sent_emails/
 
+# дополнительные файлы
+blogicum/blog/cbv.py

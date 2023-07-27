@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.template.defaultfilters import truncatewords
+from django.template.defaultfilters import truncatechars
 
 from core.models import PublishedModel
 
@@ -96,7 +96,7 @@ class Comment(PublishedModel):
     author = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def short_text(self):
-        return truncatewords(self.text, 10)
+        return truncatechars(self.text, 30)
     short_text.short_description = 'Текст комментария'
 
     class Meta:
@@ -106,4 +106,4 @@ class Comment(PublishedModel):
         ordering = ('created_at',)
 
     def __str__(self):
-        return truncatewords(self.text, 10)
+        return truncatechars(self.text, 30)

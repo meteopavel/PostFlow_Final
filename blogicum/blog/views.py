@@ -1,3 +1,4 @@
+from typing import Any, Dict
 from django.db.models import Count, Prefetch
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -49,7 +50,10 @@ class PostDetailView(DetailView):
     pk_url_kwarg = 'post_pk'
 
     published_categories = Location.objects.filter(is_published=True)
-    queryset = Post.objects.prefetch_related(
+    queryset = Post.objects.select_related(
+        'author',
+        'category',
+    ).prefetch_related(
         Prefetch('location', published_categories)
     )
 
@@ -88,7 +92,16 @@ class PostUpdateView(LoginRequiredMixin, PostMixin, PostEditMixin, UpdateView):
 
 
 class PostDeleteView(LoginRequiredMixin, PostMixin, PostEditMixin, DeleteView):
-    pass
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['form'] = PostForm(Post.objects.get(
+            pk=self.kwargs['post_pk']
+        ))
+        
+        
+        return context
 
 
 def category_posts(request, category_slug):
