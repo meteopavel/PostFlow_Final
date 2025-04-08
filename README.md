@@ -39,4 +39,31 @@
 - **Шаблоны Django**: Использование контекста, циклов и условий.  
 - **CBV & FBV**: View-классы и view-функции для обработки запросов.  
 
+## Как использовать
 
+1. **Клонируйте репозиторий**:
+   ```bash
+   git clone https://github.com/ваш_профиль/PostFlow_v2.git
+   cd django_sprint3
+2. **Создайте и активируйте виртуальное окружение**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Для Linux/MacOS
+   venv\Scripts\activate     # Для Windows
+   ```
+3. **Установите зависимости**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Примените миграции**:
+   ```bash
+   python manage.py migrate
+   ```
+5. **Загрузите фикстуры**:
+   ```bash
+   python manage.py loaddata db.json
+   ```
+6. **Запустите сервер**:
+   ```bash
+   python manage.py runserver
+   ```
